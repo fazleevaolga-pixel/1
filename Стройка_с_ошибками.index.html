@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#ffd057">
+  <title>Стройка с ошибками — математика, 5 класс</title>
+  <style>
+    :root{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif;color:#192f4c;}
+    *{box-sizing:border-box}
+    html,body{width:100%;height:100%;margin:0;overflow:hidden}
+    body{display:grid;place-items:center;background:#d8f0ff}
+    .board{position:relative;width:min(100vw,calc(100dvh * 1672 / 941));aspect-ratio:1672/941;overflow:hidden;background:#83c9fa;isolation:isolate}
+    .scene{display:block;width:100%;height:100%;user-select:none;-webkit-user-drag:none;pointer-events:none}
+    .hotspot{position:absolute;display:block;border:0;background:transparent;padding:0;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+    .hotspot:focus-visible{outline:3px dashed #193f75;outline-offset:2px;border-radius:8px;background:#fff3}
+    .hotspot[disabled]{cursor:default}
+    .check{position:absolute;right:-2%;top:-25%;width:clamp(16px,3vw,44px);aspect-ratio:1;display:none;place-items:center;background:#20aa59;color:white;border:3px solid white;border-radius:50%;box-shadow:0 3px 7px #1235;font-size:clamp(12px,2.2vw,30px);font-weight:900;line-height:1;pointer-events:none}
+    .hotspot.done .check{display:grid;animation:pop .25s ease-out}
+    @keyframes pop{from{transform:scale(.4)}to{transform:scale(1)}}
+    .counter{position:absolute;right:1.25%;top:18.5%;z-index:2;padding:.52em .82em;background:#fff8d6;border:2px solid #916029;border-radius:999px;font-size:clamp(10px,1.45vw,23px);font-weight:850;box-shadow:0 3px 6px #1734523b;white-space:nowrap;pointer-events:none}
+    .toast{position:absolute;z-index:8;left:50%;bottom:5%;transform:translateX(-50%);max-width:90%;padding:.8em 1.2em;background:#fff9e6;border:3px solid #e9aa31;border-radius:18px;box-shadow:0 6px 20px #163c4a50;font-size:clamp(14px,2.0vw,26px);font-weight:800;text-align:center;pointer-events:none}
+    .toast[hidden],.overlay[hidden]{display:none}
+    .overlay{position:absolute;inset:0;z-index:10;display:grid;place-items:center;background:#162a45a6;padding:2.5%}
+    .dialog{position:relative;width:min(94%,570px);max-height:95%;overflow:auto;padding:clamp(16px,3vw,34px);border:4px solid #e8a532;border-radius:25px;background:#fff8e8;box-shadow:0 12px 30px #0006;text-align:center}
+    .dialog h2{margin:0 0 .65em;font-size:clamp(21px,3.0vw,36px);line-height:1.15;color:#a94c0a}
+    .dialog p{font-size:clamp(15px,2vw,22px);line-height:1.35}
+    .dialog .original{margin:.4em 0 .8em;font-weight:750}
+    .equation{display:flex;align-items:center;justify-content:center;gap:.45em;flex-wrap:wrap;font-size:clamp(20px,3vw,34px);font-weight:850}
+    .equation input{width:clamp(100px,13vw,160px);min-width:0;padding:.3em .25em;border:3px solid #83b9e3;border-radius:10px;text-align:center;font:inherit;background:white;color:#193556;outline-offset:3px}
+    .equation input:focus{border-color:#2876c5}
+    .feedback{min-height:1.4em;margin:.65em 0 .3em;font-size:clamp(15px,1.7vw,20px);font-weight:800;color:#b33e2f}
+    .actions{display:flex;justify-content:center;flex-wrap:wrap;gap:12px;margin-top:16px}
+    .action{border:0;border-radius:14px;padding:.68em 1.2em;font-size:clamp(15px,1.75vw,21px);font-weight:850;cursor:pointer;background:#ffc142;color:#56310e;box-shadow:0 4px 0 #d28d18;touch-action:manipulation}
+    .action:hover{filter:brightness(1.055)}.action:active{transform:translateY(2px);box-shadow:0 2px 0 #d28d18}
+    .action.secondary{background:#cbe9fa;box-shadow:0 4px 0 #83aeca;color:#183f63}
+    @media (max-height:450px){.dialog{padding:12px}.dialog h2{margin-bottom:5px}.dialog p{margin:6px 0}.actions{margin-top:8px}.feedback{margin:5px 0}}
+  </style>
+</head>
+<body>
+<main class="board" id="board" aria-label="Найди три ошибки в переводах единиц длины">
+  <img class="scene" src="Обучающая стройка с ошибками(1).png" alt="Мультяшная стройка с восемью записями о переводе единиц длины" draggable="false">
+  <div class="counter" id="counter" aria-live="polite">Исправлено: 0 из 3</div>
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+  <div class="overlay" id="overlay" hidden>
+    <section class="dialog" id="dialog" role="dialog" aria-modal="true" aria-labelledby="dialogTitle"></section>
+  </div>
+</main>
+<script>
+'use strict';
+// Координаты каждой надписи относительно исходной картинки 1672 × 941.
+// Для сохранения точности при любом масштабе значения преобразуются в проценты.
+const W=1672,H=941;
+const tasks=[
+  {id:'crane',rect:[231,341,477,400],label:'2 км = 200 м',ok:false,left:'2 км =',unit:'м',answer:'2000'},
+  {id:'blueprint',rect:[593,503,858,590],label:'3 м = 300 см',ok:true},
+  {id:'wall',rect:[838,270,1084,358],label:'5 дм = 50 см',ok:true},
+  {id:'ladder',rect:[1384,287,1618,393],label:'70 см = 7 дм',ok:true},
+  {id:'bricks',rect:[232,552,490,636],label:'9 дм = 90 см',ok:true},
+  {id:'measure',rect:[584,732,733,859],label:'800 мм = 80 см',ok:true},
+  {id:'cement',rect:[1243,611,1535,701],label:'1 м = 1000 см',ok:false,left:'1 м =',unit:'см',answer:'100'},
+  {id:'wood',rect:[1131,762,1458,862],label:'400 см = 40 м',ok:false,left:'400 см =',unit:'м',answer:'4'}
+];
+const board=document.getElementById('board');
+const toast=document.getElementById('toast');
+const overlay=document.getElementById('overlay');
+const dialog=document.getElementById('dialog');
+const counter=document.getElementById('counter');
+let done=new Set(),active=null,toastTimer=null,successTimer=null,returnFocus=null;
+const hotspots=new Map();
+function hideToast(){clearTimeout(toastTimer);toast.hidden=true;}
+function showToast(message){hideToast();toast.textContent=message;toast.hidden=false;toastTimer=setTimeout(()=>{toast.hidden=true},2000)}
+function closeModal(){overlay.hidden=true;dialog.replaceChildren();active=null;returnFocus?.focus({preventScroll:true});returnFocus=null;}
+function openModal(){overlay.hidden=false;hideToast()}
+function button(text,fn,secondary=false){const el=document.createElement('button');el.type='button';el.textContent=text;el.className='action'+(secondary?' secondary':'');el.addEventListener('click',fn);return el}
+function handleHotspot(task,el){if(done.has(task.id))return;returnFocus=el;if(task.ok){showToast('Здесь всё верно! Ищи дальше');return}active=task;showCorrection(task)}
+function showCorrection(task){
+ openModal();
+ dialog.innerHTML='<h2 id="dialogTitle">Исправь ошибку!</h2><p class="original"></p><form id="answerForm"><div class="equation"><span id="prefix"></span><input id="answer" type="text" inputmode="numeric" autocomplete="off" aria-label="Правильное число" maxlength="12" required><span id="suffix"></span></div><div class="feedback" id="feedback" role="status" aria-live="polite"></div><div class="actions"><button class="action" type="submit">Проверить</button></div></form>';
+ dialog.querySelector('.original').textContent=task.label;
+ dialog.querySelector('#prefix').textContent=task.left;
+ dialog.querySelector('#suffix').textContent=task.unit;
+ const form=dialog.querySelector('#answerForm'),input=dialog.querySelector('#answer'),feedback=dialog.querySelector('#feedback');
+ form.addEventListener('submit',e=>{e.preventDefault();
+   const value=input.value.replace(/\s/g,'');
+   if(value===task.answer){
+     done.add(task.id);hotspots.get(task.id).classList.add('done');hotspots.get(task.id).disabled=true;
+     counter.textContent=`Исправлено: ${done.size} из 3`;
+     closeModal();showToast('Верно! Ошибка исправлена!');
+     if(done.size===3){clearTimeout(successTimer);successTimer=setTimeout(showFinal,1050)}
+   }else{feedback.textContent='Попробуй ещё раз!';input.select()}
+ });
+ input.focus({preventScroll:true});
+}
+function showFinal(){hideToast();openModal();active=null;
+ dialog.innerHTML='<h2 id="dialogTitle">Отличная работа!</h2><p>Все ошибки найдены и исправлены! Стройка спасена!</p><div class="actions" id="finalActions"></div>';
+ const actions=dialog.querySelector('#finalActions');
+ actions.append(button('Играть ещё раз',resetGame));
+ actions.append(button('Закрыть',closeModal,true));
+ actions.querySelector('button').focus({preventScroll:true});
+}
+function resetGame(){clearTimeout(successTimer);done.clear();counter.textContent='Исправлено: 0 из 3';hotspots.forEach(el=>{el.disabled=false;el.classList.remove('done')});closeModal();hideToast()}
+for(const task of tasks){
+ const el=document.createElement('button');el.type='button';el.className='hotspot';el.setAttribute('aria-label',`Проверить запись: ${task.label}`);
+ const [x1,y1,x2,y2]=task.rect;
+ Object.assign(el.style,{left:`${100*x1/W}%`,top:`${100*y1/H}%`,width:`${100*(x2-x1)/W}%`,height:`${100*(y2-y1)/H}%`});
+ const mark=document.createElement('span');mark.className='check';mark.textContent='✓';mark.setAttribute('aria-hidden','true');el.append(mark);
+ el.addEventListener('click',()=>handleHotspot(task,el));board.append(el);hotspots.set(task.id,el);
+}
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!overlay.hidden){e.preventDefault();if(active){closeModal()}else{closeModal()}}});
+// Не позволяем клавише Tab увести фокус за пределы открытого окна.
+document.addEventListener('keydown',e=>{if(e.key!=='Tab'||overlay.hidden)return;const focusables=[...dialog.querySelectorAll('button:not([disabled]),input:not([disabled])')];if(!focusables.length)return;const first=focusables[0],last=focusables[focusables.length-1];if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus()}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus()}});
+</script>
+</body>
+</html>
